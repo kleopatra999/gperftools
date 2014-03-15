@@ -131,6 +131,7 @@
 #include "system-alloc.h"      // for DumpSystemAllocatorStats, etc
 #include "tcmalloc_guard.h"    // for TCMallocGuard
 #include "thread_cache.h"      // for ThreadCache
+#include "emergency_malloc.h"
 
 #if (defined(_WIN32) && !defined(__CYGWIN__) && !defined(__CYGWIN32__)) && !defined(WIN32_OVERRIDE_ALLOCATORS)
 # define WIN32_DO_PATCHING 1
@@ -1100,7 +1101,24 @@ inline void* do_malloc_small(ThreadCache* heap, size_t size) {
   }
 }
 
+static int __thread in_malloc;
+
+class InMallocSetter {
+public:
+  InMallocSetter() {
+    CHECK_CONDITION(!in_malloc);
+    in_malloc = 1;
+  }
+  ~InMallocSetter() {
+    in_malloc = 0;
+  }
+};
+
 inline void* do_malloc_no_errno(size_t size) {
+  if (in_malloc) {
+    return tcmalloc::EmergencyMalloc(size);
+  }
+  InMallocSetter ims;
   if (ThreadCache::have_tls &&
       LIKELY(size < ThreadCache::MinSizeForSlowPath())) {
     return do_malloc_small(ThreadCache::GetCacheWhichMustBePresent(), size);
@@ -1227,6 +1245,9 @@ inline void do_free_with_callback(void* ptr, void (*invalid_free_fn)(void*)) {
 
 // The default "do_free" that uses the default callback.
 inline void do_free(void* ptr) {
+  if (tcmalloc::TryEmergencyFree(ptr)) {
+    return;
+  }
   return do_free_with_callback(ptr, &InvalidFree);
 }
 
@@ -1259,6 +1280,9 @@ inline void* do_realloc_with_callback(
     void* old_ptr, size_t new_size,
     void (*invalid_free_fn)(void*),
     size_t (*invalid_get_size_fn)(const void*)) {
+  if (tcmalloc::IsEmergencyPtr(old_ptr)) {
+    return tcmalloc::EmergencyDoRealloc(old_ptr, new_size);
+  }
   // Get the size of the old entry
   const size_t old_size = GetSizeWithCallback(old_ptr, invalid_get_size_fn);
 

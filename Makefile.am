@@ -445,7 +445,9 @@ S_TCMALLOC_MINIMAL_INCLUDES = src/common.h \
                               src/malloc_hook-inl.h \
                               src/malloc_hook_mmap_linux.h \
                               src/malloc_hook_mmap_freebsd.h \
-                              src/maybe_threads.h
+                              src/maybe_threads.h \
+                              src/emergency_malloc.h
+
 SG_TCMALLOC_MINIMAL_INCLUDES = src/gperftools/malloc_hook.h \
                                src/gperftools/malloc_hook_c.h \
                                src/gperftools/malloc_extension.h \
@@ -474,6 +476,8 @@ libtcmalloc_minimal_internal_la_SOURCES = src/common.cc \
                                           src/thread_cache.cc \
                                           src/malloc_hook.cc \
                                           src/malloc_extension.cc \
+	                                  src/base/low_level_alloc.cc \
+                                          src/emergency_malloc.cc \
                                           $(MAYBE_THREADS_CC) \
                                           $(TCMALLOC_MINIMAL_INCLUDES)
 # We #define NO_TCMALLOC_SAMPLES, since sampling is turned off for _minimal.
@@ -881,7 +885,6 @@ perftoolsinclude_HEADERS += $(SG_TCMALLOC_INCLUDES)
 noinst_LTLIBRARIES += libtcmalloc_internal.la
 libtcmalloc_internal_la_SOURCES = $(libtcmalloc_minimal_internal_la_SOURCES) \
                                   $(TCMALLOC_INCLUDES) \
-                                  src/base/low_level_alloc.cc \
                                   src/heap-profile-table.cc \
                                   src/heap-profiler.cc \
                                   src/raw_printer.cc \
