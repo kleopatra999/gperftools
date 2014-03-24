@@ -44,6 +44,10 @@
 #include <execinfo.h>
 #include <string.h>
 #include "gperftools/stacktrace.h"
+
+
+static __thread int generic_recursive;
+
 #endif  // BASE_STACKTRACE_GENERIC_INL_H_
 
 // Note: this part of the file is included several times.
@@ -65,6 +69,11 @@ static int GET_STACK_TRACE_OR_FRAMES {
   void * stack[kStackLength];
   int size;
 
+  if (generic_recursive) {
+    return 0;
+  }
+  ++generic_recursive;
+
   size = backtrace(stack, kStackLength);
   skip_count += 2;  // we want to skip the current and it's parent frame as well
   int result_count = size - skip_count;
@@ -80,5 +89,6 @@ static int GET_STACK_TRACE_OR_FRAMES {
   memset(sizes, 0, sizeof(*sizes) * result_count);
 #endif
 
+  --generic_recursive;
   return result_count;
 }
