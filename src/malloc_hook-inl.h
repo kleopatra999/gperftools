@@ -170,7 +170,7 @@ inline void MallocHook::InvokeDeleteHook(const void* p) {
   }
   // The following code is DEPRECATED.
   MallocHook::DeleteHook hook = MallocHook::GetDeleteHook();
-  if (hook != NULL) (*hook)(p);
+  if (__builtin_expect(hook != NULL, 0)) (*hook)(p);
   // End DEPRECATED code.
 }
 

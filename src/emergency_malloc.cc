@@ -37,9 +37,11 @@
 #include "internal_logging.h"
 
 namespace tcmalloc {
+  __attribute__ ((visibility("internal"))) uint32_t emergency_arena_size = 1;
+  __attribute__ ((visibility("internal"))) uintptr_t emergency_arena_mask = static_cast<uintptr_t>(-1);
+  __attribute__ ((visibility("internal"))) char *emergency_arena_start = reinterpret_cast<char *>(1);
+
   static CACHELINE_ALIGNED SpinLock emergency_malloc_lock(base::LINKER_INITIALIZED);
-  ptrdiff_t emergency_arena_size;
-  char *emergency_arena_start;
   static char *emergency_arena_end;
   static LowLevelAlloc::Arena *emergency_arena;
 
@@ -67,16 +69,37 @@ namespace tcmalloc {
 
   static void InitEmergencyMalloc(void) {
     emergency_arena_size = 10485760;
-    void *arena = LowLevelAlloc::GetDefaultPagesAllocator()->MapPages(0, emergency_arena_size);
-    emergency_arena_end = emergency_arena_start = static_cast<char *>(arena);
+
+    uint32_t roundup = static_cast<uint32_t>(emergency_arena_size) - 1;
+    roundup |= roundup >> 1;
+    roundup |= roundup >> 2;
+    roundup |= roundup >> 4;
+    roundup |= roundup >> 8;
+    roundup |= roundup >> 16;
+    roundup++;
+
+    emergency_arena_size = roundup;
+
+    void *arena = LowLevelAlloc::GetDefaultPagesAllocator()->MapPages(0, emergency_arena_size * 2);
+
+    uintptr_t arena_ptr = reinterpret_cast<uintptr_t>(arena);
+    uintptr_t ptr = (arena_ptr + emergency_arena_size - 1) & ~(emergency_arena_size-1);
+
+    emergency_arena_end = emergency_arena_start = reinterpret_cast<char *>(ptr);
     EmergencyArenaPagesAllocator *allocator = new (pages_allocator_place.bytes) EmergencyArenaPagesAllocator();
     emergency_arena = LowLevelAlloc::NewArenaWithCustomAlloc(0, LowLevelAlloc::DefaultArena(), allocator);
+
+    if (arena_ptr != ptr) {
+      LowLevelAlloc::GetDefaultPagesAllocator()->UnMapPages(0, reinterpret_cast<void *>(arena_ptr), ptr - arena_ptr);
+    }
+
+    emergency_arena_mask = ~(static_cast<uintptr_t>(emergency_arena_size) - 1);
   }
 
   PERFTOOLS_DLL_DECL void *EmergencyMalloc(size_t size) {
     SpinLockHolder l(&emergency_malloc_lock);
 
-    if (emergency_arena_start == NULL) {
+    if (emergency_arena_start == reinterpret_cast<char *>(1)) {
       InitEmergencyMalloc();
       CHECK_CONDITION(emergency_arena_start != NULL);
     }

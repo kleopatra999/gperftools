@@ -1101,32 +1101,24 @@ inline void* do_malloc_small(ThreadCache* heap, size_t size) {
   }
 }
 
-static int __thread in_malloc;
-
-class InMallocSetter {
-public:
-  InMallocSetter() {
-    CHECK_CONDITION(!in_malloc);
-    in_malloc = 1;
-  }
-  ~InMallocSetter() {
-    in_malloc = 0;
-  }
-};
+__attribute__((visibility("internal"), tls_model("initial-exec"))) __thread int in_malloc = 0;
 
 inline void* do_malloc_no_errno(size_t size) {
   if (in_malloc) {
     return tcmalloc::EmergencyMalloc(size);
   }
-  InMallocSetter ims;
+  in_malloc = 1;
+  void *rv;
   if (ThreadCache::have_tls &&
       LIKELY(size < ThreadCache::MinSizeForSlowPath())) {
-    return do_malloc_small(ThreadCache::GetCacheWhichMustBePresent(), size);
+    rv = do_malloc_small(ThreadCache::GetCacheWhichMustBePresent(), size);
   } else if (size <= kMaxSize) {
-    return do_malloc_small(ThreadCache::GetCache(), size);
+    rv = do_malloc_small(ThreadCache::GetCache(), size);
   } else {
-    return do_malloc_pages(ThreadCache::GetCache(), size);
+    rv = do_malloc_pages(ThreadCache::GetCache(), size);
   }
+  in_malloc = 0;
+  return rv;
 }
 
 inline void* do_malloc(size_t size) {

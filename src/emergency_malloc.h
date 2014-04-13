@@ -32,11 +32,13 @@
 #define EMERGENCY_MALLOC_H
 #include "config.h"
 #include <stddef.h>
+#include "base/basictypes.h"
 
 namespace tcmalloc {
 
-  extern char *emergency_arena_start;
-  extern ptrdiff_t emergency_arena_size;
+  extern __attribute__ ((visibility("internal"))) char *emergency_arena_start;
+  extern __attribute__ ((visibility("internal"))) uint32_t emergency_arena_size;
+  extern __attribute__ ((visibility("internal"))) uintptr_t emergency_arena_mask;
 
   PERFTOOLS_DLL_DECL void *EmergencyMalloc(size_t size);
   PERFTOOLS_DLL_DECL void EmergencyFree(void *p);
@@ -44,12 +46,8 @@ namespace tcmalloc {
   PERFTOOLS_DLL_DECL void *EmergencyDoRealloc(void *old_ptr, size_t new_size);
 
   static inline bool IsEmergencyPtr(void *_ptr) {
-    if (emergency_arena_start == NULL) {
-      return false;
-    }
-    char *ptr = static_cast<char *>(_ptr);
-    ptrdiff_t diff = ptr - emergency_arena_start;
-    return (diff >= 0 && diff <= emergency_arena_size);
+    uintptr_t ptr = reinterpret_cast<uintptr_t>(_ptr);
+    return ((ptr ^ reinterpret_cast<uintptr_t>(emergency_arena_start)) & emergency_arena_mask) == 0;
   }
 
   static inline bool TryEmergencyFree(void *ptr) {
